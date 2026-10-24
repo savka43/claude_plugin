@@ -1,0 +1,6 @@
+{
+  "name": "dance-buddy",
+  "version": "0.1.0",
+  "description": "Claude танцует над строкой ввода, пока работает и думает",
+  "types": "./types/index.d.ts"
+}
