@@ -1,5 +1,7 @@
 export type DanceChoice = 'random' | 'claude' | 'disco' | 'robot' | 'moonwalk' | 'macarena' | 'breakdance'
 
+export type ShowMode = 'dance' | 'jump' | 'race' | 'pudge'
+
 export type CustomDance = { title: string; ms: number; frames: [string, string, string][] }
 
 declare module 'claude-code' {
@@ -10,6 +12,7 @@ declare module 'claude-code' {
       choice: DanceChoice
       current: string
       custom: CustomDance | null
+      mode: ShowMode
     }
   }
 }

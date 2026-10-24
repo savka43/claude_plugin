@@ -1,13 +1,16 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { CustomDance, DanceChoice } from '../types'
+import type { CustomDance, DanceChoice, ShowMode } from '../types'
+import { jump, pudge, race } from './shows'
+import type { Scene } from './shows'
 
 const frame = atom({ plugin: 'dance-buddy', key: 'frame' } as const, 0)
 const isOff = atom({ plugin: 'dance-buddy', key: 'isOff' } as const, false)
 const choice = atom({ plugin: 'dance-buddy', key: 'choice' } as const, 'random')
 const current = atom({ plugin: 'dance-buddy', key: 'current' } as const, 'disco')
 const custom = atom({ plugin: 'dance-buddy', key: 'custom' } as const, null)
+const mode = atom({ plugin: 'dance-buddy', key: 'mode' } as const, 'dance')
 
 type Pose = readonly [string, string, string]
 type Dance = { title: string; ms: number; isWide?: true; pose: (n: number, width: number) => Pose }
@@ -91,6 +94,16 @@ const DANCES: Record<DanceName, Dance> = {
 const NAMES = Object.keys(DANCES) as DanceName[]
 const NOTES = ['♪      ', ' ♫     ', '  ♪    ', '   ♫   ', '    ♪  ', '     ♫ ']
 
+// The modes besides dancing: what each shows, and how fast it ticks
+const SHOWS: Record<Exclude<ShowMode, 'dance'>, { title: string; ms: number; scene: (n: number, width: number) => Scene }> = {
+  jump: { title: 'Прыжки', ms: 110, scene: jump },
+  race: { title: 'Гонки', ms: 80, scene: race },
+  pudge: { title: 'Пудж', ms: 110, scene: pudge },
+}
+const MODES: ShowMode[] = ['dance', 'jump', 'race', 'pudge']
+const MODE_TITLES: Record<ShowMode, string> = { dance: 'Танцы', jump: 'Прыжки', race: 'Гонки', pudge: 'Пудж' }
+const isMode = (s: string): s is ShowMode => (MODES as string[]).includes(s)
+
 const CUSTOM = 'custom'
 const TOOL = 'mcp__dance-buddy__dance'
 
@@ -149,6 +162,12 @@ export const register: Register = on => {
       name: 'dance',
       description: 'Выбрать танец Claude, или выключить и включить его',
       argumentHint: `[${NAMES.join('|')}|claude|random|next|off|on]`,
+      immediate: true,
+    })
+    await $.command.register({
+      name: 'mode',
+      description: 'Выбрать, что показывать, пока Claude работает: танцы, прыжки, гонки или Пудж',
+      argumentHint: `[${MODES.join('|')}|next]`,
       immediate: true,
     })
     await $.tool.register({
@@ -217,12 +236,30 @@ export const register: Register = on => {
     await update($, choice, () => name)
     await update($, current, () => name)
     await update($, isOff, () => false)
+    await update($, mode, () => 'dance')
     await update($, frame, () => 0)
 
     restart($, beat, DANCES[name].ms)
 
     return { text: `Теперь Claude танцует: ${DANCES[name].title} 🕺` }
   }).catch(() => ({ text: 'Не получилось переключить танец' }))
+
+  on('command.run', { command: 'mode' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    const was = await read($, mode)
+    const picked = arg === '' || arg === 'next' ? MODES[(MODES.indexOf(was) + 1) % MODES.length] : arg
+
+    if (picked === undefined || !isMode(picked)) {
+      return { text: `Нет такого режима. Есть: ${MODES.map(m => `${m} (${MODE_TITLES[m]})`).join(', ')}, а ещё next` }
+    }
+
+    await update($, mode, () => picked)
+    await update($, isOff, () => false)
+    await update($, frame, () => 0)
+    restart($, beat, picked === 'dance' ? danceOf(await read($, current), await read($, custom)).ms : SHOWS[picked].ms)
+
+    return { text: `Режим: ${MODE_TITLES[picked]} 🎬` }
+  }).catch(() => ({ text: 'Не получилось переключить режим' }))
 
   on('tool.call', { tool: TOOL }, async ($, e) => {
     const input = e as { dance?: unknown; title?: unknown; ms?: unknown; frames?: unknown }
@@ -260,7 +297,7 @@ export const register: Register = on => {
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
 
-    if ((await read($, choice)) !== 'claude' || (await read($, isOff))) {
+    if ((await read($, choice)) !== 'claude' || (await read($, isOff)) || (await read($, mode)) !== 'dance') {
       return composed
     }
 
@@ -277,7 +314,8 @@ export const register: Register = on => {
       const name = picked === 'random' || picked === 'claude' ? NAMES[Math.floor(Math.random() * NAMES.length)] ?? 'disco' : picked
       await update($, current, () => name)
       await update($, frame, () => 0)
-      start($, beat, DANCES[name].ms)
+      const shown = await read($, mode)
+      start($, beat, shown === 'dance' ? DANCES[name].ms : SHOWS[shown].ms)
     }
 
     return next(e)
@@ -298,10 +336,35 @@ export const register: Register = on => {
 
     const { Box, Text } = $.ui.resolve(e)
     const n = await read($, frame)
+    const shown = await read($, mode)
+
+    if (shown !== 'dance') {
+      const scene = SHOWS[shown].scene(n, e.props.bodyColumns)
+      const isCaptioned = e.props.maxRows > scene.rows.length
+
+      return (
+        <Box flexDirection="column">
+          {scene.rows.map((runs, y) => (
+            <Box key={`r${y}`} flexDirection="row">
+              {runs.map((run, i) => (
+                <Text key={`r${y}c${i}`} color={run.color} mono>
+                  {run.text}
+                </Text>
+              ))}
+            </Box>
+          ))}
+          {isCaptioned ? (
+            <Text dimColor wrap="truncate">
+              {scene.caption} · /mode — сменить режим
+            </Text>
+          ) : null}
+        </Box>
+      )
+    }
     const dance = danceOf(await read($, current), await read($, custom))
     const notes = NOTES[n % NOTES.length] ?? NOTES[0]!
     const caption = `Claude думает и танцует: ${dance.title}`
-    const hint = '/dance next — другой танец · /dance off — выключить'
+    const hint = '/dance next — другой танец · /mode — сменить режим'
 
     if (dance.isWide) {
       return (
