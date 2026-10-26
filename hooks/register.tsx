@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { CustomDance, DanceChoice, ShowMode } from '../types'
-import { jump, pudge, race } from './shows'
+import { jump, pudge, race, sweep } from './shows'
 import type { Scene } from './shows'
 
 const frame = atom({ plugin: 'dance-buddy', key: 'frame' } as const, 0)
@@ -99,9 +99,10 @@ const SHOWS: Record<Exclude<ShowMode, 'dance'>, { title: string; ms: number; sce
   jump: { title: 'Прыжки', ms: 110, scene: jump },
   race: { title: 'Гонки', ms: 80, scene: race },
   pudge: { title: 'Пудж', ms: 110, scene: pudge },
+  maid: { title: 'Уборка', ms: 120, scene: sweep },
 }
-const MODES: ShowMode[] = ['dance', 'jump', 'race', 'pudge']
-const MODE_TITLES: Record<ShowMode, string> = { dance: 'Танцы', jump: 'Прыжки', race: 'Гонки', pudge: 'Пудж' }
+const MODES: ShowMode[] = ['dance', 'jump', 'race', 'pudge', 'maid']
+const MODE_TITLES: Record<ShowMode, string> = { dance: 'Танцы', jump: 'Прыжки', race: 'Гонки', pudge: 'Пудж', maid: 'Уборка' }
 const isMode = (s: string): s is ShowMode => (MODES as string[]).includes(s)
 
 const CUSTOM = 'custom'
@@ -166,7 +167,7 @@ export const register: Register = on => {
     })
     await $.command.register({
       name: 'mode',
-      description: 'Выбрать, что показывать, пока Claude работает: танцы, прыжки, гонки или Пудж',
+      description: 'Выбрать, что показывать, пока Claude работает: танцы, прыжки, гонки, Пудж или уборка',
       argumentHint: `[${MODES.join('|')}|next]`,
       immediate: true,
     })

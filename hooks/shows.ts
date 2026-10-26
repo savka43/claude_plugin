@@ -12,6 +12,9 @@ const BLUE = '#5b8dd6'
 const GREEN = '#8fbc5a'
 const GOLD = '#e8c547'
 
+// Clawd and the broom's reach on either side
+const CLAWD_SPAN = 9
+
 type Cell = { ch: string; color: string | undefined }
 
 class Canvas {
@@ -203,4 +206,53 @@ export function pudge(n: number, width: number): Scene {
   }
 
   return { rows: c.rows(), caption: `Пудж фармит крипов · ластхитов: ${kills}` }
+}
+
+const BROWN = '#9a6b3f'
+const SWEEP_MARGIN = 4
+
+/** Clawd in a maid's cap and apron sweeps the floor from one edge of the band to the other and back. */
+export function sweep(n: number, width: number): Scene {
+  const c = new Canvas(width, 4)
+  const span = Math.max(1, width - CLAWD_SPAN - SWEEP_MARGIN * 2)
+  const step = n % (span * 2)
+  const isRight = step < span
+  const passes = Math.floor(n / span)
+  const travelled = isRight ? step : step - span
+  const x = SWEEP_MARGIN + pingPong(n, span)
+  // The broom's bristles lead the way; the floor ahead of them is still dusty
+  const front = isRight ? x + 11 : x - 3
+
+  for (let col = 0; col < width; col++) {
+    const isAhead = isRight ? col > front : col < front
+    const seed = (col * 37 + passes * 11) % 23
+    if (isAhead && seed < 4) {
+      c.put(col, 3, seed % 2 === 0 ? '·' : '∙', DIM)
+    } else if (!isAhead && (col < x || col > x + CLAWD_SPAN) && (col * 7 + n) % 29 === 0) {
+      // A freshly swept floor sparkles here and there
+      c.put(col, 3, '✧', WHITE)
+    }
+  }
+
+  c.put(x + 2, 0, '▄▀▄▀▄', WHITE)
+  c.put(x, 1, ' ▐▛███▜▌', ORANGE)
+  c.put(x, 2, '▝▜█████▛▘', ORANGE)
+  c.put(x + 3, 2, '███', WHITE)
+  c.put(x, 3, Math.floor(n / 2) % 2 === 0 ? '  ▘▘ ▝▝' : '  ▝▘ ▝▘', ORANGE)
+
+  const bristles = n % 2 === 0 ? '▞▞' : '▚▚'
+  const pile = travelled < span / 3 ? '▁' : travelled < (span * 2) / 3 ? '▂▁' : '▄▂▁'
+  if (isRight) {
+    c.put(x + 9, 2, '╲', BROWN)
+    c.put(x + 9, 3, bristles, GOLD)
+    c.put(x + 11, 3, pile, DIM)
+    c.put(x + 12, 2, n % 3 === 0 ? '˙ ˚' : '', DIM)
+  } else {
+    c.put(x - 1, 2, '╱', BROWN)
+    c.put(x - 2, 3, bristles, GOLD)
+    c.put(x - 2 - pile.length, 3, [...pile].reverse().join(''), DIM)
+    c.put(x - 5, 2, n % 3 === 0 ? '˚ ˙' : '', DIM)
+  }
+
+  return { rows: c.rows(), caption: `Горничная Clawd подметает 🧹 · проходов: ${passes}` }
 }
